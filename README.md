@@ -233,6 +233,7 @@ Slide navigation and selection shortcuts apply when the sidebar or preview has f
 | Shift+F5 | Start presentation from the first slide |
 | Escape | Leave presentation |
 | Space | Play / pause video while presenting |
+| X | Swap the slides and Presenter View between displays while presenting |
 
 With more than one display, Hype sends the slides fullscreen to an external display
 and opens Presenter View on the laptop display with the current slide, next slide,
@@ -240,8 +241,10 @@ and any speaker notes written as `<!-- comments -->`. A timer next to the slide 
 shows how long the show has run. It waits at zero on the slide you start on and starts
 counting when you move on from it; click it to start it over. If Hype is already on an
 external display, that display remains the audience display. Navigate from either
-display with the presentation shortcuts. Connecting or disconnecting a display ends
-the show and returns to the editor on a connected display.
+display with the presentation shortcuts. To put the slides on the other display,
+click **Swap displays** in Presenter View or press **X**; the show goes on where it
+was. Connecting or disconnecting a display ends the show and returns to the editor
+on a connected display.
 
 The mouse wheel over the sidebar selects the previous or next slide. Home/End jumps to the first/last slide when the focus is in the slides list (Visual mode or Overview) and moves to the start/end of the line when a text box has focus. Page Up/Down scrolls a page; Ctrl+Home/End goes to the start/end of the text. Slide movement shortcuts work when the sidebar, preview, or Overview has focus; they leave the selected slides together and stop at the deck boundaries. While typing, Ctrl+Up/Down navigates one slide and Ctrl+Page Up/Page Down navigates five, keeping the text editor focused.
 

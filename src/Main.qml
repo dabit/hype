@@ -112,21 +112,10 @@ ApplicationWindow {
             presentationReturnScreen = current
             presentationReturnVisibility = win.visibility
             presentationReturnGeometry = Qt.rect(win.x, win.y, win.width, win.height)
-            const screens = presentationScreens(current, displays)
-            // Set the output before mapping fullscreen, and move within virtual desktops too.
-            win.hide()
-            win.screen = screens.audience
-            win.x = screens.audience.virtualX
-            win.y = screens.audience.virtualY
-            win.showFullScreen()
-            if (screens.notes) {
-                presenterWindow.screen = screens.notes
-                presenterWindow.x = screens.notes.virtualX
-                presenterWindow.y = screens.notes.virtualY
-                presenterWindow.showFullScreen()
-                Qt.callLater(function() { presenterWindow.requestActivate() })
-            } else stage.forceActiveFocus()
+            placePresentation(presentationScreens(current, displays))
         } else {
+            presentationAudienceScreen = null
+            presentationNotesScreen = null
             presenterWindow.hide()
             if (player) player.stop()
             // Clear fullscreen before restoring the editor's output and geometry.
@@ -148,6 +137,40 @@ ApplicationWindow {
                 stage.forceActiveFocus()
             })
         }
+    }
+    // The displays the show is on, as placed; the notes display is null with only one.
+    property var presentationAudienceScreen: null
+    property var presentationNotesScreen: null
+    readonly property bool canSwapDisplays: presenting && !!presentationNotesScreen
+    function placePresentation(screens) {
+        presentationAudienceScreen = screens.audience
+        presentationNotesScreen = screens.notes
+        // Set the output before mapping fullscreen, and move within virtual desktops too.
+        win.hide()
+        win.screen = screens.audience
+        win.x = screens.audience.virtualX
+        win.y = screens.audience.virtualY
+        win.showFullScreen()
+        if (screens.notes) {
+            presenterWindow.screen = screens.notes
+            presenterWindow.x = screens.notes.virtualX
+            presenterWindow.y = screens.notes.virtualY
+            presenterWindow.showFullScreen()
+            Qt.callLater(function() { presenterWindow.requestActivate() })
+        } else stage.forceActiveFocus()
+    }
+    // Trades the two displays without ending the show. A display connected or removed
+    // still ends it, through onScreensChanged, so the pair here is never stale.
+    function swapDisplays() {
+        if (!canSwapDisplays) return
+        // Unmap the notes first, so they never show over the slides while both move.
+        presenterWindow.hide()
+        // Clear fullscreen before moving, as ending the show does: going fullscreen again
+        // from fullscreen leaves Qt restoring the editor onto the wrong display afterwards.
+        win.hide()
+        win.showNormal()
+        win.hide()
+        placePresentation({ audience: presentationNotesScreen, notes: presentationAudienceScreen })
     }
     function isBuiltInScreen(screen) {
         const name = screen && screen.name ? screen.name.toLowerCase() : ""
@@ -520,6 +543,16 @@ ApplicationWindow {
                     background: Rectangle { color: presenterTimer.hovered ? win.ui.hover : "transparent"; radius: win.softRadius }
                 }
                 Button {
+                    objectName: "swapDisplaysButton"
+                    // Never holds focus: a stray Space must not move the notes onto the audience.
+                    focusPolicy: Qt.NoFocus
+                    text: qsTr("Swap displays")
+                    visible: win.canSwapDisplays
+                    onClicked: win.swapDisplays()
+                    contentItem: Text { text: parent.text; color: win.ui.foreground; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                    background: Rectangle { color: parent.hovered ? win.ui.hover : win.ui.button; radius: win.softRadius; border.color: win.ui.border }
+                }
+                Button {
                     text: qsTr("End show")
                     onClicked: win.togglePresent()
                     contentItem: Text { text: parent.text; color: win.ui.foreground; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
@@ -755,6 +788,8 @@ ApplicationWindow {
     Shortcut { enabled: !win.popupOpen && !deck.compressingImage; sequence: "Ctrl+N"; onActivated: deck.newDeck() }
     Shortcut { enabled: !win.popupOpen && !deck.compressingImage; sequences: ["F5", "Ctrl+Space"]; context: win.presenting ? Qt.ApplicationShortcut : Qt.WindowShortcut; autoRepeat: false; onActivated: win.togglePresent() }
     Shortcut { enabled: !win.popupOpen && !deck.compressingImage; sequence: "Shift+F5"; context: win.presenting ? Qt.ApplicationShortcut : Qt.WindowShortcut; autoRepeat: false; onActivated: win.presentFromBeginning() }
+    // Enabled through the whole show, so with one display X is taken and does nothing.
+    Shortcut { sequence: "X"; context: Qt.ApplicationShortcut; enabled: !win.popupOpen && !deck.compressingImage && win.presenting; autoRepeat: false; onActivated: win.swapDisplays() }
     Shortcut { sequence: "Escape"; context: Qt.ApplicationShortcut; enabled: !win.popupOpen && !deck.compressingImage && win.presenting; onActivated: win.togglePresent() }
     Shortcut { sequence: "Ctrl+Z"; enabled: !win.popupOpen && !deck.compressingImage && (!slideEditor.activeFocus && !sourceEditor.activeFocus); onActivated: deck.undo() }
     Shortcut { sequence: "Ctrl+Shift+Z"; enabled: !win.popupOpen && !deck.compressingImage && (!slideEditor.activeFocus && !sourceEditor.activeFocus); onActivated: deck.redo() }
@@ -1181,7 +1216,7 @@ ApplicationWindow {
             { title: qsTr("Presentation"), keys: [
                 ["Ctrl+N", qsTr("New presentation")], ["Ctrl+O", qsTr("Open")], ["Ctrl+S", qsTr("Save")], ["Ctrl+Shift+S", qsTr("Save as")], ["Ctrl+Q", qsTr("Quit")],
                 ["Ctrl+E", qsTr("Export as PDF")], ["Ctrl+Shift+E", qsTr("Export as PowerPoint")], ["Ctrl+Space / F5", qsTr("Present")], ["Shift+F5", qsTr("Present from first slide")], ["Esc", qsTr("Stop presenting")],
-                ["Space", qsTr("Play or pause video while presenting")] ] },
+                ["Space", qsTr("Play or pause video while presenting")], ["X", qsTr("Swap displays while presenting")] ] },
             { title: qsTr("View"), keys: [
                 ["Ctrl+M", qsTr("Overview on or off")], ["Ctrl+.", qsTr("Markdown source on or off")],
                 ["Tab", qsTr("Switch between slides and editor")], ["Enter", qsTr("Open slide from Overview")],

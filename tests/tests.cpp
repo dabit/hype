@@ -1181,6 +1181,35 @@ static void write(const QString &path, const QString &content) {
         QTRY_COMPARE(window->visibility(), QWindow::FullScreen);
         QTRY_VERIFY(presenter->isVisible());
         QCOMPARE(presenter->screen(), laptop);
+        // X and the Swap displays button trade the displays from either window, and the
+        // show goes on: the change of screens is not a display coming or going.
+        auto swap = presenter->findChild<QQuickItem *>("swapDisplaysButton");
+        QVERIFY(swap);
+        QVERIFY(swap->isVisible());
+        auto expectScreens = [&](QScreen *audience, QScreen *presenterScreen) {
+            QTRY_COMPARE(window->screen(), audience);
+            QTRY_COMPARE(presenter->screen(), presenterScreen);
+            QTRY_COMPARE(window->visibility(), QWindow::FullScreen);
+            QTRY_COMPARE(presenter->visibility(), QWindow::FullScreen);
+            QVERIFY(window->property("presenting").toBool());
+        };
+        QTest::keyClick(window, Qt::Key_X);
+        expectScreens(laptop, external);
+        QVERIFY(QTest::qWaitForWindowExposed(presenter));
+        QTest::mouseClick(presenter, Qt::LeftButton, Qt::NoModifier,
+                          swap->mapToScene(QPointF(swap->width() / 2, swap->height() / 2)).toPoint());
+        expectScreens(external, laptop);
+        // The click leaves no focus behind: a later Space or Enter must not move the notes.
+        QTest::keyClick(presenter, Qt::Key_Space);
+        QTest::keyClick(presenter, Qt::Key_Return);
+        QTest::qWait(300);
+        expectScreens(external, laptop);
+        presenter->requestActivate();
+        QTRY_VERIFY(presenter->isActive());
+        notes->forceActiveFocus();
+        QTest::keyClick(presenter, Qt::Key_X);
+        expectScreens(laptop, external);
+        QCOMPARE(deck.selected(), 0);
         presenter->requestActivate();
         QTRY_VERIFY(presenter->isActive());
         notes->forceActiveFocus();
@@ -3168,6 +3197,14 @@ static void write(const QString &path, const QString &content) {
         QVERIFY(stage->isVisible());
         QVERIFY2(!window->findChild<QQuickWindow *>("presenterWindow")->isVisible(),
                  "Presenter View opened on the only screen, covering the slides");
+        // With one display there is nothing to swap, and X never reaches the editor.
+        const QString beforeSwap = d.source();
+        QVERIFY(!window->property("canSwapDisplays").toBool());
+        QTest::keyClick(window, Qt::Key_X);
+        QVERIFY(window->property("presenting").toBool());
+        QCOMPARE(d.source(), beforeSwap);
+        QVERIFY(!window->findChild<QQuickWindow *>("presenterWindow")->isVisible());
+        QTRY_COMPARE(window->visibility(), QWindow::FullScreen);
         QTest::keyClick(window, Qt::Key_Space, Qt::ControlModifier);
         QVERIFY(!window->property("presenting").toBool());
         QVERIFY(editor->isVisible());
