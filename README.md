@@ -236,7 +236,9 @@ Slide navigation and selection shortcuts apply when the sidebar or preview has f
 
 With more than one display, Hype sends the slides fullscreen to an external display
 and opens Presenter View on the laptop display with the current slide, next slide,
-and any speaker notes written as `<!-- comments -->`. If Hype is already on an
+and any speaker notes written as `<!-- comments -->`. A timer next to the slide count
+shows how long the show has run. It waits at zero on the slide you start on and starts
+counting when you move on from it; click it to start it over. If Hype is already on an
 external display, that display remains the audience display. Navigate from either
 display with the presentation shortcuts. Connecting or disconnecting a display ends
 the show and returns to the editor on a connected display.

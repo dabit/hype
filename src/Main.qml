@@ -71,9 +71,40 @@ ApplicationWindow {
     property var presentationReturnScreen: null
     property int presentationReturnVisibility: Window.Windowed
     property rect presentationReturnGeometry: Qt.rect(0, 0, 0, 0)
+    // Counted from a wall-clock start, so a late or skipped tick never loses time.
+    property double presentationStart: 0
+    property int presentationElapsed: 0
+    // The timer waits at zero on the slide the show opened with, and starts once it moves on.
+    property bool presentationTimerWaiting: false
+    property int presentationOpeningSlide: -1
+    function resetPresentationTimer() {
+        presentationTimerWaiting = false
+        presentationStart = Date.now()
+        presentationElapsed = 0
+    }
+    Connections {
+        target: deck
+        function onSelectionChanged() {
+            if (win.presenting && win.presentationTimerWaiting && deck.selected !== win.presentationOpeningSlide)
+                win.resetPresentationTimer()
+        }
+    }
+    // Pure so tests can pass seconds: mm:ss, and h:mm:ss from one hour.
+    function formatElapsed(seconds) {
+        const pad = n => (n < 10 ? "0" : "") + n
+        const hours = Math.floor(seconds / 3600), minutes = Math.floor(seconds / 60) % 60
+        return (hours > 0 ? hours + ":" + pad(minutes) : pad(minutes)) + ":" + pad(seconds % 60)
+    }
+    Timer {
+        interval: 250; repeat: true; running: win.presenting && !win.presentationTimerWaiting
+        onTriggered: win.presentationElapsed = Math.max(0, Math.floor((Date.now() - win.presentationStart) / 1000))
+    }
     function togglePresent() {
         presenting = !presenting
         if (presenting) {
+            resetPresentationTimer()
+            presentationTimerWaiting = true
+            presentationOpeningSlide = deck.selected
             win.focusedEditor = ""
             // Window.screen follows the window as it moves. Save a stable display wrapper.
             const displays = Qt.application.screens
@@ -476,6 +507,17 @@ ApplicationWindow {
                 Label {
                     text: qsTr("Slide %1 of %2").arg(deck.selected + 1).arg(deck.count)
                     color: win.ui.muted; font.pixelSize: 16
+                }
+                Button {
+                    id: presenterTimer; objectName: "presenterTimer"
+                    // Never holds focus, so Space or Enter during the show cannot reset it.
+                    focusPolicy: Qt.NoFocus
+                    text: win.formatElapsed(win.presentationElapsed)
+                    Accessible.name: qsTr("Elapsed time %1").arg(text)
+                    ToolTip.visible: hovered; ToolTip.text: qsTr("Reset the timer")
+                    onClicked: win.resetPresentationTimer()
+                    contentItem: Text { text: parent.text; color: win.ui.muted; font.pixelSize: 16; font.features: { "tnum": 1 }; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                    background: Rectangle { color: presenterTimer.hovered ? win.ui.hover : "transparent"; radius: win.softRadius }
                 }
                 Button {
                     text: qsTr("End show")

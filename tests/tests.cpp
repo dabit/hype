@@ -1033,6 +1033,104 @@ static void write(const QString &path, const QString &content) {
         window->setProperty("allowClose", true);
         window->close();
     }
+    void presenterTimerCountsFromEachStart() {
+        if (qEnvironmentVariable("HYPE_GUI_TESTS") == "0")
+            QSKIP("HYPE_GUI_TESTS=0 skips the window-level tests");
+        Deck deck;
+        deck.editSource("# First\n---\n# Last\n");
+        QQuickStyle::setStyle("Basic");
+        qmlRegisterType<SlideItem>("Hype", 1, 0, "SlideCanvas");
+        qmlRegisterType<AppTheme>("Hype", 1, 0, "AppTheme");
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("deck", &deck);
+        engine.addImageProvider("slides", new Thumbnails(&deck));
+        engine.load(QUrl("qrc:/Main.qml"));
+        QVERIFY(!engine.rootObjects().isEmpty());
+        auto window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+        auto presenter = window->findChild<QQuickWindow *>("presenterWindow");
+        QVERIFY(presenter);
+        auto timer = presenter->findChild<QQuickItem *>("presenterTimer");
+        QVERIFY(timer);
+
+        auto format = [&](int seconds) {
+            QVariant result;
+            QMetaObject::invokeMethod(window, "formatElapsed", Q_RETURN_ARG(QVariant, result),
+                                      Q_ARG(QVariant, seconds));
+            return result.toString();
+        };
+        QCOMPARE(format(0), QString("00:00"));
+        QCOMPARE(format(59), QString("00:59"));
+        QCOMPARE(format(60), QString("01:00"));
+        QCOMPARE(format(3599), QString("59:59"));
+        QCOMPARE(format(3600), QString("1:00:00"));
+        QCOMPARE(format(36000 + 61), QString("10:01:01"));
+
+        // Pretends the show started a while ago, since the count follows the clock.
+        auto startedAgo = [&](qint64 seconds) {
+            window->setProperty("presentationStart",
+                                double(QDateTime::currentMSecsSinceEpoch() - seconds * 1000));
+        };
+        QVERIFY(QMetaObject::invokeMethod(window, "togglePresent"));
+        QVERIFY(window->property("presenting").toBool());
+        QCOMPARE(timer->property("text").toString(), QString("00:00"));
+        // It waits on the opening slide, and starts from zero when the show moves on.
+        startedAgo(65);
+        QTest::qWait(600);
+        QCOMPARE(timer->property("text").toString(), QString("00:00"));
+        deck.select(1);
+        QTest::qWait(600);
+        QCOMPARE(timer->property("text").toString(), QString("00:00"));
+        startedAgo(65);
+        QTRY_COMPARE(timer->property("text").toString(), QString("01:05"));
+        // Going back to the opening slide keeps it counting.
+        deck.select(0);
+        startedAgo(66);
+        QTRY_COMPARE(timer->property("text").toString(), QString("01:06"));
+        startedAgo(3725);
+        QTRY_COMPARE(timer->property("text").toString(), QString("1:02:05"));
+
+        // Clicking the timer starts it over, without ending the show.
+        // With two displays the show already opened it; with one, open it here to click.
+        if (!presenter->isVisible()) {
+            presenter->resize(1000, 640);
+            presenter->show();
+        }
+        QVERIFY(QTest::qWaitForWindowExposed(presenter));
+        QTest::mouseClick(presenter, Qt::LeftButton, Qt::NoModifier,
+                          timer->mapToScene(QPointF(timer->width() / 2, timer->height() / 2)).toPoint());
+        QCOMPARE(timer->property("text").toString(), QString("00:00"));
+        QVERIFY(window->property("presenting").toBool());
+        // The click leaves no focus behind for Space or Enter to reset the timer again.
+        startedAgo(20);
+        QTRY_COMPARE(timer->property("text").toString(), QString("00:20"));
+        QTest::keyClick(presenter, Qt::Key_Space);
+        QTest::keyClick(presenter, Qt::Key_Return);
+        QTest::qWait(600);
+        QCOMPARE(timer->property("text").toString(), QString("00:20"));
+
+        // Ending the show stops the count, and the next show starts from zero.
+        startedAgo(30);
+        QTRY_COMPARE(timer->property("text").toString(), QString("00:30"));
+        QVERIFY(QMetaObject::invokeMethod(window, "togglePresent"));
+        QVERIFY(!window->property("presenting").toBool());
+        startedAgo(90);
+        QTest::qWait(600);
+        QCOMPARE(timer->property("text").toString(), QString("00:30"));
+        // The next show waits on its own opening slide, wherever the show starts.
+        QCOMPARE(deck.selected(), 0);
+        deck.select(1);
+        QVERIFY(QMetaObject::invokeMethod(window, "togglePresent"));
+        QCOMPARE(timer->property("text").toString(), QString("00:00"));
+        startedAgo(40);
+        QTest::qWait(600);
+        QCOMPARE(timer->property("text").toString(), QString("00:00"));
+        deck.select(0);
+        startedAgo(7);
+        QTRY_COMPARE(timer->property("text").toString(), QString("00:07"));
+        QVERIFY(QMetaObject::invokeMethod(window, "togglePresent"));
+        window->setProperty("allowClose", true);
+        window->close();
+    }
     void presenterViewUsesSeparateScreens() {
         if (qEnvironmentVariable("HYPE_GUI_TESTS") == "0")
             QSKIP("HYPE_GUI_TESTS=0 skips the window-level tests");
